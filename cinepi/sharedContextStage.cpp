@@ -19,6 +19,7 @@
 #include <sys/stat.h>
 #include <sys/ipc.h>
 #include <sys/shm.h>
+#include <cerrno>
 
 #define PROJECT_ID 0x43494E45 // ASCII for "CINE"
 
@@ -114,13 +115,16 @@ sharedContextStage::sharedContextStage(RPiCamApp *app) : PostProcessingStage(app
     // Try to obtain an existing segment or create a new one
     segment_id = shmget(segment_key, size, IPC_CREAT | S_IRUSR | S_IWUSR);
     if (segment_id == -1) {
-        // Handle error
+        console->error("sharedContext: shmget failed, errno={}", errno);
+        return;
     }
+    console->info("sharedContext: shared memory segment created, id={}", segment_id);
 
     // Attach the shared memory segment
     shared_data = (SharedMemoryBuffer*)shmat(segment_id, NULL, 0);
     if (shared_data == (void*) -1) {
-        // Handle error
+        console->error("sharedContext: shmat failed, errno={}", errno);
+        return;
     }
 
     if(shared_data->frame == -1){
@@ -141,27 +145,44 @@ sharedContextStage::sharedContextStage(RPiCamApp *app) : PostProcessingStage(app
 
 sharedContextStage::~sharedContextStage() 
 {
-    shmdt(shared_data);
-    shmctl(segment_id, IPC_RMID, NULL);
+    if (shared_data) {
+        shmdt(shared_data);
+        shared_data = nullptr;
+    }
+    if (segment_id != -1) {
+        shmctl(segment_id, IPC_RMID, NULL);
+        segment_id = -1;
+    }
 }
 
 void sharedContextStage::Teardown(){
+    if (!shared_data)
+        return;
     shmdt(shared_data);
-    shmctl(segment_id, IPC_RMID, NULL);
+    shared_data = nullptr;
+    if (segment_id != -1) {
+        shmctl(segment_id, IPC_RMID, NULL);
+        segment_id = -1;
+    }
 }
 
 
 void sharedContextStage::Configure()
 {
+    if (!shared_data)
+        return;
     shared_data->raw = app_->GetStreamInfo(app_->RawStream());
     shared_data->isp = app_->GetStreamInfo(app_->GetMainStream());
-    // shared_data->lores = app_->GetStreamInfo(app_->LoresStream());
+    if (app_->LoresStream())
+        shared_data->lores = app_->GetStreamInfo(app_->LoresStream());
 }
 
 #include <chrono>
 
 bool sharedContextStage::Process(CompletedRequestPtr &completed_request)
 {
+    if (!shared_data)
+        return false;
     shared_data->ts = getTs();
 
     auto stats = completed_request->metadata.get(libcamera::controls::rpi::PispStatsOutput);
@@ -175,8 +196,11 @@ bool sharedContextStage::Process(CompletedRequestPtr &completed_request)
         shared_data->fd_isp = completed_request->buffers[app_->GetMainStream()]->planes()[0].fd.get();
         shared_data->raw_length = completed_request->buffers[app_->RawStream()]->planes()[0].length;
         shared_data->isp_length = completed_request->buffers[app_->GetMainStream()]->planes()[0].length;
-        // shared_data->fd_lores = completed_request->buffers[app_->LoresStream()]->planes()[0].fd.get();
-        // shared_data->fdSize[shared_data->active_buffer] = completed_request->buffers[stream_]->planes()[0].length;
+        if (app_->LoresStream())
+        {
+            shared_data->fd_lores = completed_request->buffers[app_->LoresStream()]->planes()[0].fd.get();
+            shared_data->lores_length = completed_request->buffers[app_->LoresStream()]->planes()[0].length;
+        }
         shared_data->framerate = completed_request->framerate;
         shared_data->sequence = completed_request->sequence;
         parseMetaData(completed_request->metadata);

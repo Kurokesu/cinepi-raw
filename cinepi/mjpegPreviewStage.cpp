@@ -153,8 +153,13 @@ void mjpegStreamStage::Teardown(){
 
 void mjpegStreamStage::Configure()
 {
-    stream_ = app_->GetMainStream();
-    info_ = app_->GetStreamInfo(stream_);
+    // Use lores stream for preview (much smaller than main stream)
+    // Falls back to main stream if lores is not available
+    stream_ = app_->LoresStream(&info_);
+    if (!stream_) {
+        stream_ = app_->GetMainStream();
+        info_ = app_->GetStreamInfo(stream_);
+    }
     console->info("networkPreviewStage: {}x{} {}", info_.width, info_.height, info_.stride);
     console->info("Setting up NetworkPreview on port: {}", port_);
     streamer_.start(port_, 8);

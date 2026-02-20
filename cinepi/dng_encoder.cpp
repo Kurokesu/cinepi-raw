@@ -75,7 +75,14 @@ static const TIFFFieldInfo xtiffFieldInfo[] = {
     { TIFFTAG_CAMERALABEL, TIFF_VARIABLE, TIFF_VARIABLE, TIFF_ASCII,      FIELD_CUSTOM, 
       true, false, cameraLabelStr },
     { TIFFTAG_REELNAME, TIFF_VARIABLE, TIFF_VARIABLE, TIFF_ASCII,      FIELD_CUSTOM, 
-      true, false, reelNameStr }
+      true, false, reelNameStr },
+    { TIFFTAG_ACTIVEAREA,        4, 4, TIFF_LONG, FIELD_CUSTOM,
+  true, false, const_cast<char*>("ActiveArea") },
+{ TIFFTAG_DEFAULTCROPORIGIN, 2, 2, TIFF_LONG, FIELD_CUSTOM,
+  true, false, const_cast<char*>("DefaultCropOrigin") },
+{ TIFFTAG_DEFAULTCROPSIZE,   2, 2, TIFF_LONG, FIELD_CUSTOM,
+  true, false, const_cast<char*>("DefaultCropSize") }
+    
 };
 
 
@@ -351,7 +358,7 @@ void DngEncoder::setup_encoder(libcamera::StreamConfiguration const &cfg, libcam
     dng_info.cfa_repeat_pattern_dim[1] = 2;
     dng_info.black_level_repeat_dim[0] = 2;
     dng_info.black_level_repeat_dim[1] = 2;
-    dng_info.bayer_order = strdup(bayer_format.order);
+    memcpy(dng_info.bayer_order,bayer_format.order,4);
 
     // offsets
     // dng_info.offset_y_start = options_->rawCrop[0];
@@ -409,7 +416,7 @@ void DngEncoder::setup_encoder(libcamera::StreamConfiguration const &cfg, libcam
     dng_info.model = options_->model;
     dng_info.serial = getHwId();
     dng_info.software = "Libcamera;cinepi-raw";
-    dng_info.ucm = options_->ucm.value_or("CinePI");
+    dng_info.ucm = options_->ucm.value_or("ALTCINECAM");
 
     // adjust disk_buffer
     const double MAX_RAM_FRACTION = 2.0 / 3.0;
@@ -550,6 +557,13 @@ size_t DngEncoder::dng_save(int thread_num, uint8_t const *mem_tiff, uint8_t con
         if (!tif)
             throw std::runtime_error("could not open file " + fn);
         
+        /* Register ALL custom CinemaDNG tags before any IFD is written */
+TIFFMergeFieldInfo(
+        tif,
+        xtiffFieldInfo,
+        sizeof(xtiffFieldInfo) / sizeof(xtiffFieldInfo[0]));
+/* ----- end of new block ----- */
+        
         console->trace("thrd: {} Writing DNG thumbnail {}", thread_num, fn);
         TIFFSetField(tif, TIFFTAG_SUBFILETYPE, 1);
         TIFFSetField(tif, TIFFTAG_IMAGEWIDTH, constDngInfo.thumbWidth);
@@ -629,6 +643,23 @@ size_t DngEncoder::dng_save(int thread_num, uint8_t const *mem_tiff, uint8_t con
         TIFFSetField(tif, TIFFTAG_BLACKLEVELREPEATDIM, &constDngInfo.black_level_repeat_dim);
         TIFFSetField(tif, TIFFTAG_BLACKLEVEL, 4, &constDngInfo.black_levels);
         
+        /* …after BLACKLEVEL tags… */
+
+uint32_t active[4] = {
+    dng_info.offset_y_start,
+    dng_info.offset_x_start,
+    dng_info.offset_y_start + dng_info.t_height - 1,
+    dng_info.offset_x_start + dng_info.t_width  - 1
+};
+uint32_t cropOrigin[2] = { dng_info.offset_x_start, dng_info.offset_y_start };
+uint32_t cropSize[2]   = { dng_info.t_width,        dng_info.t_height      };
+
+TIFFSetField(tif, TIFFTAG_ACTIVEAREA,        active);
+TIFFSetField(tif, TIFFTAG_DEFAULTCROPORIGIN, cropOrigin);
+TIFFSetField(tif, TIFFTAG_DEFAULTCROPSIZE,   cropSize);
+
+/* …continue with TIMECODE, CAMERALABEL, etc.… */
+        
         TIFFSetField(tif, TIFFTAG_ANALOGBALANCE, 3, constDngInfo.ANALOGBALANCE);
         TIFFSetField(tif, TIFFTAG_BASELINEEXPOSURE, 1.0);
         TIFFSetField(tif, TIFFTAG_BASELINENOISE, 1.0);
@@ -639,7 +670,6 @@ size_t DngEncoder::dng_save(int thread_num, uint8_t const *mem_tiff, uint8_t con
         time_t t;
         time(&t);
         struct tm *time_info = localtime(&t);
-        TIFFMergeFieldInfo(tif, xtiffFieldInfo, 5);
         const double frameRate = (double)*options_->framerate;
         TIFFSetField(tif, TIFFTAG_FRAMERATE, &frameRate);
 

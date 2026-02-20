@@ -50,9 +50,18 @@ class CinePIController : public CinePIState
         };
 
         void start(){
-            redis_ = std::make_unique<sw::redis::Redis>(options_->redis.value_or(REDIS_DEFAULT));
-            console->debug(redis_->ping());
+            ensureRedis();
             main_thread_ = std::thread(std::bind(&CinePIController::mainThread, this));
+        }
+
+        void ensureRedis(){
+            if (!redis_)
+                redis_ = std::make_unique<sw::redis::Redis>(options_->redis.value_or(REDIS_DEFAULT));
+        }
+
+        void startSubscriber(){
+            if (!main_thread_.joinable())
+                main_thread_ = std::thread(std::bind(&CinePIController::mainThread, this));
         }
 
         void sync();

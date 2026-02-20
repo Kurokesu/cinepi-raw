@@ -37,7 +37,7 @@ void generate_filename(RawOptions *options, unsigned int clip_number)
 	char time_string[32];
 	std::tm *time_info = std::localtime(&raw_time);
 	std::strftime(time_string, sizeof(time_string), "%y-%m-%d_%H%M", time_info);
-	snprintf(filename, sizeof(filename), "%s_%s_C%05d", "CINEPI", time_string, clip_number);
+	snprintf(filename, sizeof(filename), "%s_%s_C%05d", "ALTCINECAM", time_string, clip_number);
 	options->folder = std::string(filename);
 }
 

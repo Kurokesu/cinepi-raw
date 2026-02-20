@@ -4,6 +4,33 @@ using namespace std;
 using namespace std::chrono;
 
 #define CP_DEF_WIDTH 1920
+
+// Map colour temperature (Kelvin) to approximate R,B gains for manual WB
+static void kelvinToColourGains(int kelvin, float& r_gain, float& b_gain) {
+    struct { int k; float r; float b; } const table[] = {
+        { 2800, 1.55f, 0.70f },
+        { 3200, 1.40f, 0.78f },
+        { 4000, 1.18f, 0.90f },
+        { 4500, 1.10f, 0.95f },
+        { 5600, 1.00f, 1.00f },
+        { 6500, 0.92f, 1.06f },
+        { 7500, 0.86f, 1.14f },
+        { 9000, 0.78f, 1.26f },
+    };
+    const size_t n = sizeof(table) / sizeof(table[0]);
+    r_gain = 1.0f;
+    b_gain = 1.0f;
+    if (kelvin <= table[0].k)       { r_gain = table[0].r; b_gain = table[0].b; return; }
+    if (kelvin >= table[n-1].k)     { r_gain = table[n-1].r; b_gain = table[n-1].b; return; }
+    for (size_t i = 0; i < n - 1; i++) {
+        if (kelvin >= table[i].k && kelvin <= table[i+1].k) {
+            float t = (float)(kelvin - table[i].k) / (float)(table[i+1].k - table[i].k);
+            r_gain = table[i].r + t * (table[i+1].r - table[i].r);
+            b_gain = table[i].b + t * (table[i+1].b - table[i].b);
+            return;
+        }
+    }
+}
 #define CP_DEF_HEIGHT 1080
 #define CP_DEF_FRAMERATE 30
 #define CP_DEF_ISO 400
@@ -102,12 +129,18 @@ void CinePIController::sync(){
 
     console->critical(7);
 
-    char *ptr = strtok(&(*pipe_replies.get<OptionalString>(6))[0], ",");
-    uint8_t i = 0;
-    while(ptr != NULL){
-        cg_rb_[i] = (float)stof(ptr);
-        i++;
-        ptr = strtok(NULL, ",");  
+    auto colorgains = pipe_replies.get<OptionalString>(6);
+    if(colorgains && !colorgains->empty()){
+        char *ptr = strtok(&(*colorgains)[0], ",");
+        uint8_t i = 0;
+        while(ptr != NULL && i < 2){
+            cg_rb_[i] = (float)stof(ptr);
+            i++;
+            ptr = strtok(NULL, ",");  
+        }
+    } else {
+        cg_rb_[0] = 1.0f;
+        cg_rb_[1] = 1.0f;
     }
 
     console->critical(8);
@@ -206,7 +239,7 @@ void CinePIController::process(CompletedRequestPtr &completed_request){
 }
 
 void CinePIController::mainThread(){
-
+    try {
     console->info("CinePIController Started!");
     auto sub = redis_->subscriber();
 
@@ -250,10 +283,24 @@ void CinePIController::mainThread(){
         }},
         { CONTROL_KEY_WB, [this](const std::optional<std::string>& r) {
             if(r) {
-                awb_ = (unsigned int)(stoi(*r));
+                int val = stoi(*r);
+                awb_ = (unsigned int)val;
                 libcamera::ControlList cl;
-                cl.set(libcamera::controls::AwbEnable, awb_);
-                app_->SetControls(cl);
+                if (val == 0) {
+                    // AUTO: enable AWB
+                    cl.set(libcamera::controls::AwbEnable, true);
+                    app_->SetControls(cl);
+                } else {
+                    // Manual Kelvin: disable AWB and set colour gains for this temperature
+                    cl.set(libcamera::controls::AwbEnable, false);
+                    float r_gain, b_gain;
+                    kelvinToColourGains(val, r_gain, b_gain);
+                    cg_rb_[0] = r_gain;
+                    cg_rb_[1] = b_gain;
+                    cl.set(libcamera::controls::ColourGains, libcamera::Span<const float, 2>({ r_gain, b_gain }));
+                    app_->SetControls(cl);
+                    redis_->set(CONTROL_KEY_COLORGAINS, std::to_string(r_gain) + "," + std::to_string(b_gain));
+                }
             }
         }},
         { CONTROL_KEY_COLORGAINS, [this](const std::optional<std::string>& r) {
@@ -377,5 +424,10 @@ void CinePIController::mainThread(){
         } catch (const Error &err) {
             // Handle exceptions.
         }
+    }
+    } catch (std::exception const &e) {
+        console->error("mainThread failed: {} (controls via Redis may not work)", e.what());
+    } catch (...) {
+        console->error("mainThread failed with unknown exception (controls via Redis may not work)");
     }
 }

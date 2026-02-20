@@ -1,4 +1,5 @@
 #include "cinepi_sound.hpp"
+#include <cstdlib>
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/xml_parser.hpp>
 #include <boost/rational.hpp>
@@ -148,10 +149,20 @@ CinePISound::~CinePISound() {
 }
 
 void CinePISound::start() {
-    detectRecordingDevices();
-    if (canRecordAudio) {
-        parseHardwareParams();
-        sound_thread_ = std::thread(std::bind(&CinePISound::soundThread, this));
+    if (std::getenv("CINEPI_SKIP_SOUND")) {
+        canRecordAudio = false;
+        console->info("Sound disabled (CINEPI_SKIP_SOUND)");
+        return;
+    }
+    try {
+        detectRecordingDevices();
+        if (canRecordAudio) {
+            parseHardwareParams();
+            sound_thread_ = std::thread(std::bind(&CinePISound::soundThread, this));
+        }
+    } catch (...) {
+        console->error("Sound startup failed (continuing without audio)");
+        canRecordAudio = false;
     }
 }
 
@@ -206,12 +217,12 @@ void CinePISound::soundThread() {
                 break;
 
             /// after the .wav file is saved, use timestamps to match video length and conform to BWF standard by adding iXML. 
-            double start_time, duration, audio_duration, vts_delta;
+            double start_time, audio_duration, vts_delta;
             audio_duration = (((double)samples_captured/(double)audioSampleRate));
         
             console->debug("rec start: {} samples: {} audio dur: {}", ts_first_buffer_b, samples_captured, audio_duration);
-            int64_t vts_start, vts_end, frames;
-            frames = app_->GetEncoder()->timestamps.size();
+            int64_t vts_start = 0, vts_end = 0;
+            size_t frames = app_->GetEncoder()->timestamps.size();
             if(frames > 0){
                 vts_start = app_->GetEncoder()->timestamps.front();
                 vts_end = app_->GetEncoder()->timestamps.back();
@@ -219,7 +230,7 @@ void CinePISound::soundThread() {
                 console->debug("rec start: {} rec_end: {} rec_dur: {} rec_frames: {}", vts_start, vts_end, vts_delta, frames);
             }
 
-            if(vts_start < ts_first_buffer_b){
+            if (frames > 0 && vts_start < static_cast<int64_t>(ts_first_buffer_b)){
                 console->critical("Frame start before audio!!!!");
                 return;
             }
@@ -277,8 +288,8 @@ void CinePISound::soundThread() {
                 << " --OriginationTime="        << originationTime
                 << " --Timereference="          << timeReference;
 
-            system(ffmpeg_oss.str().c_str());
-            system(mv_oss.str().c_str());
+            //system(ffmpeg_oss.str().c_str());
+            //system(mv_oss.str().c_str());
             generateXML(xml_filename);
             if(file_exists(xml_filename)){
                 system(bwfedit.str().c_str());
@@ -392,7 +403,7 @@ bool CinePISound::recording_ended() {
 }
 
 bool CinePISound::isRecording() {
-    return (recording_ && (ts_first_buffer_b > 0) || !canRecordAudio);
+    return (recording_) || !canRecordAudio;
 }
 
 
@@ -420,8 +431,7 @@ void CinePISound::detectRecordingDevices() {
         // Extract the default device or set your logic
         // For simplicity, here we're just setting the first detected device as the default
         size_t start = result.find("card ");
-        size_t end = result.find(":", start);
-        defaultDevice = "hw:" + result.substr(start + 5, 1) + ",0"; // assumes single-digit card numbers
+        defaultDevice = "plughw:" + result.substr(start + 5, 1) + ",0";
         canRecordAudio = true;
     }
 
@@ -480,14 +490,12 @@ void CinePISound::parseHardwareParams() {
     while (std::getline(ss, line)) {
         // Match channels
         if (std::regex_search(line, matches, channelsRegex) && matches.size() > 0) {
-            int audioChannelsMin = std::stoi(matches[1]);
             int audioChannelsMax = std::stoi(matches[2]);
             audioChannels = audioChannelsMax;
         }
 
         // Match rates
         if (std::regex_search(line, matches, ratesRegex) && matches.size() > 0) {
-            int audioSampleRateMin = std::stoi(matches[1]);
             int audioSampleRateMax = std::stoi(matches[2]);
             audioSampleRate = audioSampleRateMax;
         }

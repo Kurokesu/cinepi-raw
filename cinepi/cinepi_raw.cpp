@@ -6,6 +6,7 @@
  */
 
 #include <chrono>
+#include <cstdlib>
 #include "cinepi_sound.hpp"
 #include "cinepi_controller.hpp"
 
@@ -19,9 +20,10 @@ using namespace std::placeholders;
 // The main even loop for the application.
 static void event_loop(CinePIRecorder &app, CinePIController &controller, CinePISound &sound)
 {
-	controller.start();
+	// Connect Redis and sync config only; start subscriber thread after camera is open
+	// so a crash in the Redis subscriber does not prevent preview from coming up.
+	controller.ensureRedis();
 	controller.sync();
-
 	sound.start();
 
 	static auto console = spdlog::stdout_color_mt("event_loop"); 
@@ -31,7 +33,16 @@ static void event_loop(CinePIRecorder &app, CinePIController &controller, CinePI
 	app.SetEncodeOutputReadyCallback(std::bind(&Output::OutputReady, output.get(), _1, _2, _3, _4));
 	app.SetMetadataReadyCallback(std::bind(&Output::MetadataReady, output.get(), _1));
 
+	console->info("Opening camera...");
 	app.OpenCamera();
+	console->info("Camera opened, post-processor ready (preview segment should exist)");
+	// Start Redis subscriber (handles controls from GUI). Wrapped in try-catch
+	// because thread creation can fail with std::system_error on some setups.
+	try {
+		controller.startSubscriber();
+	} catch (std::exception const &e) {
+		console->error("Redis subscriber failed to start: {} (GUI controls won't work but preview continues)", e.what());
+	}
 	app.StartEncoder();
 	std::vector<std::shared_ptr<libcamera::Camera>> cameras = app.GetCameras();
 	if (cameras.size() == 0)
