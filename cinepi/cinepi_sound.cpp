@@ -530,7 +530,7 @@ void CinePISound::generateXML(std::string fn){
     tree.put("BWFXML.CIRCLED", "true");
     tree.put("BWFXML.TAPE", "CINEPI");
 
-    boost::rational<int> rationalNumber = doubleToRational(*options_->framerate);
+    boost::rational<int> rationalNumber = doubleToRational(options_->Get().framerate.value_or(30.0));
 
     std::string tfps = std::to_string(rationalNumber.numerator()) + "/" + std::to_string(rationalNumber.denominator());
 

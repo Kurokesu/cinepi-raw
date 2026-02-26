@@ -8,13 +8,13 @@
 #ifndef CINEPI_RECORDER_HPP
 #define CINEPI_RECORDER_HPP
 
-#include "core/rpicam_app.hpp"
-#include "core/stream_info.hpp"
+#include <rpicam-apps/core/rpicam_app.hpp>
+#include <rpicam-apps/core/stream_info.hpp>
 #include "raw_options.hpp"
 #include <arm_neon.h>
 
 #include "dng_encoder.hpp"
-#include "encoder/encoder.hpp"
+#include <rpicam-apps/encoder/encoder.hpp>
 
 typedef std::function<void(void *, size_t, int64_t, bool)> EncodeOutputReadyCallback;
 typedef std::function<void(libcamera::ControlList &)> MetadataReadyCallback;
@@ -85,7 +85,10 @@ public:
 		}
 		encoder_->EncodeBuffer2(buffer->planes()[0].fd.get(), mem[0].size(), (void *)mem[0].data(), info, lomem[0].size(), (void *)lomem[0].data(), loinfo, timestamp_ns / 1000, completed_request->metadata);
 	}
-	RawOptions *GetOptions() const { return static_cast<RawOptions *>(options_.get()); }
+	RawOptions *GetOptions() const
+	{
+		return static_cast<RawOptions *>(RPiCamApp::GetOptions());
+	}
 	DngEncoder *GetEncoder() { return encoder_.get(); }
 	void StopEncoder() { encoder_.reset(); }
 
@@ -110,7 +113,7 @@ private:
 			if (encode_buffer_queue_.empty())
 				throw std::runtime_error("no buffer available to return");
 			CompletedRequestPtr &completed_request = encode_buffer_queue_.front();
-			if (metadata_ready_callback_ && !GetOptions()->metadata.empty())
+			if (metadata_ready_callback_ && !GetOptions()->Get().metadata.empty())
 				metadata_ready_callback_(completed_request->metadata);
 			encode_buffer_queue_.pop(); // drop shared_ptr reference
 		}

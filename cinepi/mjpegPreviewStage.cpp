@@ -6,9 +6,9 @@
 
 #include <libcamera/stream.h>
 
-#include "core/frame_info.hpp"
-#include "core/rpicam_app.hpp"
-#include "post_processing_stages/post_processing_stage.hpp"
+#include <rpicam-apps/core/frame_info.hpp>
+#include <rpicam-apps/core/rpicam_app.hpp>
+#include <rpicam-apps/post_processing_stages/post_processing_stage.hpp>
 
 #include <jpeglib.h>
 #include <nadjieb/mjpeg_streamer.hpp>

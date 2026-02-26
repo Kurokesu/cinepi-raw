@@ -11,14 +11,12 @@
 
 #include <string>
 
-#include "core/video_options.hpp"
+#include <rpicam-apps/core/video_options.hpp>
 
 struct RawOptions : public VideoOptions
 {   
     RawOptions() : VideoOptions()
 	{
-		using namespace boost::program_options;
-		options_.add_options();
 	}
 
 	std::optional<std::string> redis;

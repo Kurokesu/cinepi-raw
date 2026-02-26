@@ -11,7 +11,7 @@
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
 
-#include "encoder/encoder.hpp"
+#include <rpicam-apps/encoder/encoder.hpp>
 #include "raw_options.hpp"
 #include "cinepi_frameinfo.hpp"
 

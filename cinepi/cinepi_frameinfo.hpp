@@ -3,21 +3,21 @@
 #include <cstdio>
 #include <string>
 
-// #include <linux/bcm2835-isp.h>
 #include <libcamera/controls.h>
-#include "core/frame_info.hpp"
+#include <rpicam-apps/core/frame_info.hpp>
 
 #define HISTOGRAM_SIZE 3*NUM_HISTOGRAM_BINS
 
 struct CinePIFrameInfo : public FrameInfo
 {
-	CinePIFrameInfo(libcamera::ControlList &ctrls)
-		: FrameInfo(ctrls)
+	CinePIFrameInfo(const CompletedRequestPtr &completed_request)
+		: FrameInfo(completed_request)
 	{
+		const libcamera::ControlList &ctrls = completed_request->metadata;
+
 		auto colorT = ctrls.get(libcamera::controls::ColourTemperature);
 		if (colorT)
 			colorTemp = *colorT;
-
 
         auto sts = ctrls.get(libcamera::controls::SensorTimestamp);
         if(sts){
@@ -70,7 +70,6 @@ struct CinePIFrameInfo : public FrameInfo
         std::string histoString() const{
             std::ostringstream os;
             os << rL << "%, " << gL << "%, " << bL << "% : " << rH << "%, " << gH << "%, " << bH << "%";
-            // os << (unsigned int)trafficLight;
             return os.str();
         };
 

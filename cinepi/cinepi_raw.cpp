@@ -11,7 +11,7 @@
 #include "cinepi_controller.hpp"
 
 #include "dng_encoder.hpp"
-#include "output/output.hpp"
+#include <rpicam-apps/output/output.hpp>
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
 
@@ -57,7 +57,7 @@ static void event_loop(CinePIRecorder &app, CinePIController &controller, CinePI
 				app.StopCamera();
 				app.Teardown();
 			}
-			app.ConfigureVideo(CinePIRecorder::FLAG_VIDEO_RAW, 0);
+			app.ConfigureVideo(CinePIRecorder::FLAG_VIDEO_RAW);
 			app.StartCamera();
 			controller.cameraRunning = true;
 
@@ -135,8 +135,8 @@ int main(int argc, char *argv[])
 			options->rawCrop[2] = 0;
 			options->rawCrop[3] = 0;
 
-			if (options->verbose >= 2)
-				options->Print();
+		if (options->Get().verbose >= 2)
+			options->Print();
 
 			event_loop(app, controller, sound);
 		}

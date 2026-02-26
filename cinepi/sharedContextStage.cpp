@@ -6,9 +6,9 @@
 
 #include <libcamera/stream.h>
 
-#include "core/frame_info.hpp"
-#include "core/rpicam_app.hpp"
-#include "post_processing_stages/post_processing_stage.hpp"
+#include <rpicam-apps/core/frame_info.hpp>
+#include <rpicam-apps/core/rpicam_app.hpp>
+#include <rpicam-apps/post_processing_stages/post_processing_stage.hpp>
 
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
@@ -244,9 +244,9 @@ void sharedContextStage::parseMetaData(libcamera::ControlList &ctrls)
     if (fom)
         shared_data->metadata.focus = *fom;
 
-    auto ae = ctrls.get(libcamera::controls::AeLocked);
+    auto ae = ctrls.get(libcamera::controls::AeState);
     if (ae)
-        shared_data->metadata.aelock = *ae;
+        shared_data->metadata.aelock = (*ae == libcamera::controls::AeStateConverged);
 
     auto lp = ctrls.get(libcamera::controls::LensPosition);
     if (lp)

@@ -205,27 +205,27 @@ void CinePIController::sync(){
     options_->thumbnailSize = thumbnail_size_;
     
     options_->compression = compression_;
-    // options_->width = width_;
-    // options_->height = height_;
-    options_->framerate = framerate_;
-    options_->gain = iso_;
+    // options_->Set().width = width_;
+    // options_->Set().height = height_;
+    options_->Set().framerate = framerate_;
+    options_->Set().gain = iso_;
 
     options_->awbEn = awb_;
     if(awb_)
-        options_->awb_index = 5; // daylight
+        options_->Set().awb_index = 5; // daylight
     else{
-        options_->awb_gain_r = cg_rb_[0];
-        options_->awb_gain_b = cg_rb_[1];
+        options_->Set().awb_gain_r = cg_rb_[0];
+        options_->Set().awb_gain_b = cg_rb_[1];
     }
     
-    options_->denoise = "off";
-    // options_->lores_width = options_->width >> 3;
-    // options_->lores_height = options_->height >> 3;
-    options_->mode_string = "0:0:0:0";
+    options_->Set().denoise = "off";
+    // options_->Set().lores_width = options_->Get().width >> 3;
+    // options_->Set().lores_height = options_->Get().height >> 3;
+    options_->Set().mode_string = "0:0:0:0";
 }
 
 void CinePIController::process(CompletedRequestPtr &completed_request){
-    CinePIFrameInfo info(completed_request->metadata);
+    CinePIFrameInfo info(completed_request);
 
     Json::Value data;
     Json::Value histo;
@@ -342,13 +342,13 @@ void CinePIController::mainThread(){
         { CONTROL_KEY_WIDTH, [this](const std::optional<std::string>& r) {
             if(r) {
                 width_ = (uint16_t)(stoi(*r));
-                options_->width = width_;
+                options_->Set().width = width_;
             }
         }},
         { CONTROL_KEY_HEIGHT, [this](const std::optional<std::string>& r) {
             if(r) {
                 height_ = (uint16_t)(stoi(*r));
-                options_->height = height_;
+                options_->Set().height = height_;
             }
         }},
         { CONTROL_KEY_COMPRESSION, [this](const std::optional<std::string>& r) {
@@ -361,7 +361,7 @@ void CinePIController::mainThread(){
         { CONTROL_KEY_FRAMERATE, [this](const std::optional<std::string>& r) {
             if(r) {
                 framerate_ = stof(*r);
-                options_->framerate = framerate_;
+                options_->Set().framerate = framerate_;
 
                 long int durationValues[2] = { static_cast<long int>(1000000.0 / framerate_),
                                             static_cast<long int>(1000000.0 / framerate_) };

@@ -18,8 +18,8 @@
 #include <fstream>
 #include <regex>
 
-#include "core/still_options.hpp"
-#include "core/stream_info.hpp"
+#include <rpicam-apps/core/still_options.hpp>
+#include <rpicam-apps/core/stream_info.hpp>
 
 #include "dng_encoder.hpp"
 #include <arm_neon.h>
@@ -120,10 +120,10 @@ static const std::map<PixelFormat, BayerFormat> bayer_formats =
 	{ formats::R12, { "BGGR-12", 12, TIFF_BGGR, false, false } },
 
 	/* PiSP compressed formats. */
-	{ formats::RGGB16_PISP_COMP1, { "RGGB-16-PISP", 16, TIFF_RGGB, false, true } },
-	{ formats::GRBG16_PISP_COMP1, { "GRBG-16-PISP", 16, TIFF_GRBG, false, true } },
-	{ formats::GBRG16_PISP_COMP1, { "GBRG-16-PISP", 16, TIFF_GBRG, false, true } },
-	{ formats::BGGR16_PISP_COMP1, { "BGGR-16-PISP", 16, TIFF_BGGR, false, true } },
+	{ formats::RGGB_PISP_COMP1, { "RGGB-16-PISP", 16, TIFF_RGGB, false, true } },
+	{ formats::GRBG_PISP_COMP1, { "GRBG-16-PISP", 16, TIFF_GRBG, false, true } },
+	{ formats::GBRG_PISP_COMP1, { "GBRG-16-PISP", 16, TIFF_GBRG, false, true } },
+	{ formats::BGGR_PISP_COMP1, { "BGGR-16-PISP", 16, TIFF_BGGR, false, true } },
 };
 
 void pack_8bit_data(const uint16_t* src, uint8_t* dst, size_t num_pixels) {
@@ -670,7 +670,7 @@ TIFFSetField(tif, TIFFTAG_DEFAULTCROPSIZE,   cropSize);
         time_t t;
         time(&t);
         struct tm *time_info = localtime(&t);
-        const double frameRate = (double)*options_->framerate;
+	const double frameRate = (double)options_->Get().framerate.value_or(30.0);
         TIFFSetField(tif, TIFFTAG_FRAMERATE, &frameRate);
 
         const uint8_t frames = static_cast<uint8_t>(fn % static_cast<int>(frameRate));

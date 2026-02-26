@@ -8,7 +8,7 @@
 #include <time.h>
 #include <stdint.h>
 
-#include "core/logging.hpp"
+#include <rpicam-apps/core/logging.hpp>
 
 #include <chrono>
 #include <iostream>
