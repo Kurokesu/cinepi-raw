@@ -75,6 +75,7 @@ class CinePIController : public CinePIState
             app_->SetControls(cl);
         }
 
+        void applyAwb();
         void process(CompletedRequestPtr &completed_request);
         void process_stream_info(libcamera::StreamConfiguration const &cfg){
 

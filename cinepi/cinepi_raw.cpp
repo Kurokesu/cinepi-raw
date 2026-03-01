@@ -60,6 +60,7 @@ static void event_loop(CinePIRecorder &app, CinePIController &controller, CinePI
 			app.ConfigureVideo(CinePIRecorder::FLAG_VIDEO_RAW);
 			app.StartCamera();
 			controller.cameraRunning = true;
+			controller.applyAwb();
 
 			libcamera::StreamConfiguration const &cfg = app.RawStream()->configuration();
 			console->info("Raw stream: {}x{} : {} : {}", cfg.size.width, cfg.size.height, cfg.stride, cfg.pixelFormat.toString());

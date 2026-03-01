@@ -5,17 +5,19 @@ using namespace std::chrono;
 
 #define CP_DEF_WIDTH 1920
 
-// Map colour temperature (Kelvin) to approximate R,B gains for manual WB
+// IMX283 sensor-calibrated colour gains derived from the ct_curve in
+// /usr/share/libcamera/ipa/rpi/pisp/imx283.json.  Values are 1/ct_ratio
+// (the reciprocal of the raw R/G and B/G ratios at each colour temperature).
 static void kelvinToColourGains(int kelvin, float& r_gain, float& b_gain) {
     struct { int k; float r; float b; } const table[] = {
-        { 2800, 1.55f, 0.70f },
-        { 3200, 1.40f, 0.78f },
-        { 4000, 1.18f, 0.90f },
-        { 4500, 1.10f, 0.95f },
-        { 5600, 1.00f, 1.00f },
-        { 6500, 0.92f, 1.06f },
-        { 7500, 0.86f, 1.14f },
-        { 9000, 0.78f, 1.26f },
+        { 2800, 1.17f, 2.86f },
+        { 3200, 1.31f, 2.37f },
+        { 4000, 1.55f, 1.91f },
+        { 4500, 1.70f, 1.74f },
+        { 5600, 1.90f, 1.57f },
+        { 6500, 2.02f, 1.50f },
+        { 7500, 2.14f, 1.44f },
+        { 9000, 2.35f, 1.35f },
     };
     const size_t n = sizeof(table) / sizeof(table[0]);
     r_gain = 1.0f;
@@ -35,7 +37,7 @@ static void kelvinToColourGains(int kelvin, float& r_gain, float& b_gain) {
 #define CP_DEF_FRAMERATE 30
 #define CP_DEF_ISO 400
 #define CP_DEF_SHUTTER 50
-#define CP_DEF_AWB 1
+#define CP_DEF_AWB 0
 #define CP_DEF_COMPRESS 0
 #define CP_DEF_THUMBNAIL 1
 #define CP_DEF_THUMBNAIL_SIZE 3
@@ -210,18 +212,30 @@ void CinePIController::sync(){
     options_->Set().framerate = framerate_;
     options_->Set().gain = iso_;
 
-    options_->awbEn = awb_;
-    if(awb_)
-        options_->Set().awb_index = 5; // daylight
-    else{
-        options_->Set().awb_gain_r = cg_rb_[0];
-        options_->Set().awb_gain_b = cg_rb_[1];
-    }
+    options_->awbEn = (awb_ == 0);
     
     options_->Set().denoise = "off";
     // options_->Set().lores_width = options_->Get().width >> 3;
     // options_->Set().lores_height = options_->Get().height >> 3;
     options_->Set().mode_string = "0:0:0:0";
+}
+
+void CinePIController::applyAwb() {
+    libcamera::ControlList cl;
+    if (awb_ == 0) {
+        console->info("AWB: AUTO");
+        cl.set(libcamera::controls::AwbEnable, true);
+    } else {
+        float r_gain, b_gain;
+        kelvinToColourGains(awb_, r_gain, b_gain);
+        cg_rb_[0] = r_gain;
+        cg_rb_[1] = b_gain;
+        console->info("AWB: {}K -> ColourGains R={:.2f} B={:.2f}", awb_, r_gain, b_gain);
+        cl.set(libcamera::controls::AwbEnable, false);
+        cl.set(libcamera::controls::ColourGains,
+               libcamera::Span<const float, 2>({ r_gain, b_gain }));
+    }
+    app_->SetControls(cl);
 }
 
 void CinePIController::process(CompletedRequestPtr &completed_request){
@@ -283,23 +297,11 @@ void CinePIController::mainThread(){
         }},
         { CONTROL_KEY_WB, [this](const std::optional<std::string>& r) {
             if(r) {
-                int val = stoi(*r);
-                awb_ = (unsigned int)val;
-                libcamera::ControlList cl;
-                if (val == 0) {
-                    // AUTO: enable AWB
-                    cl.set(libcamera::controls::AwbEnable, true);
-                    app_->SetControls(cl);
-                } else {
-                    // Manual Kelvin: disable AWB and set colour gains for this temperature
-                    cl.set(libcamera::controls::AwbEnable, false);
-                    float r_gain, b_gain;
-                    kelvinToColourGains(val, r_gain, b_gain);
-                    cg_rb_[0] = r_gain;
-                    cg_rb_[1] = b_gain;
-                    cl.set(libcamera::controls::ColourGains, libcamera::Span<const float, 2>({ r_gain, b_gain }));
-                    app_->SetControls(cl);
-                    redis_->set(CONTROL_KEY_COLORGAINS, std::to_string(r_gain) + "," + std::to_string(b_gain));
+                awb_ = (unsigned int)stoi(*r);
+                applyAwb();
+                if (awb_ > 0) {
+                    redis_->set(CONTROL_KEY_COLORGAINS,
+                                std::to_string(cg_rb_[0]) + "," + std::to_string(cg_rb_[1]));
                 }
             }
         }},
